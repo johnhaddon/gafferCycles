@@ -1,0 +1,12 @@
+== Setup ==
+
+- Download https://github.com/ImageEngine/gaffer/releases[latest Gaffer binary release]
+- Make sure python/GafferCycles is on the PYTHONPATH. Make sure startup/gui is on the GAFFER_STARTUP_PATHS.
+
+== Use ==
+
+Create a Cycles/Render node from the node menu, and feed in a scene. Executing this node will create an XML scene file in Cycles format. This can then be rendered using cycles standalone.
+
+== Limitations ==
+
+Currently only polygon meshes and the main render camera are exported.
