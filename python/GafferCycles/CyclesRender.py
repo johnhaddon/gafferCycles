@@ -49,6 +49,14 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 		
 		self.addChild(
 			Gaffer.StringPlug(
+				"mode",
+				Gaffer.Plug.Direction.In,
+				"render",
+			)
+		)
+
+		self.addChild(
+			Gaffer.StringPlug(
 				"xmlFileName",
 			)
 		)
@@ -81,6 +89,9 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 						
 			with open( fileName, "w" ) as f :
 				self.__writeScene( f )
+				
+			if self["mode"].getValue() == "render" :
+				os.system( "cycles '%s'&" % fileName )
 			
 	def __writeScene( self, f ) :
 	

@@ -34,11 +34,4 @@
 #  
 ##########################################################################
 
-import GafferUI
-
-import GafferCycles
-import GafferCyclesUI
-
-nodeMenu = GafferUI.NodeMenu.acquire( application )
-
-nodeMenu.append( "/Cycles/Render", GafferCycles.CyclesRender, searchText = "CyclesRender" )
+import CyclesRenderUI

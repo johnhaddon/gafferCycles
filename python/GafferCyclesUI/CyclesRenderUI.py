@@ -34,11 +34,31 @@
 #  
 ##########################################################################
 
+import Gaffer
 import GafferUI
-
 import GafferCycles
-import GafferCyclesUI
 
-nodeMenu = GafferUI.NodeMenu.acquire( application )
+GafferUI.PlugValueWidget.registerCreator(
+	GafferCycles.CyclesRender.staticTypeId(),
+	"mode",
+	GafferUI.EnumPlugValueWidget,
+	labelsAndValues = (
+		( "Render", "render" ),
+		( "Generate XML only", "generate" ),
+	),
+)
 
-nodeMenu.append( "/Cycles/Render", GafferCycles.CyclesRender, searchText = "CyclesRender" )
+GafferUI.PlugValueWidget.registerCreator(
+	GafferCycles.CyclesRender.staticTypeId(),
+	"xmlFileName",
+	lambda plug : GafferUI.PathPlugValueWidget( plug,
+		path = Gaffer.FileSystemPath( "/", filter = Gaffer.FileSystemPath.createStandardFilter() ),
+		pathChooserDialogueKeywords = {
+			"bookmarks" : GafferUI.Bookmarks.acquire(
+				plug.ancestor( Gaffer.ApplicationRoot.staticTypeId() ),
+				category = "cyclesXML",
+			),
+			"leaf" : True,
+		},
+	),
+)
