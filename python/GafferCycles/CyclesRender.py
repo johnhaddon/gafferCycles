@@ -264,7 +264,15 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 		if result is not None :
 			return result
 		
-		types = { "float", "string", "point", "vector", "normal", "color", "closure color" }
+		types = {
+			"float" : "float",
+			"string" : "string",
+			"point" : "point",
+			"vector" : "vector",
+			"normal" : "normal",
+			"color" : "color",
+			"pointer" : "closure color",
+		}
 		
 		result = ""
 		for line in subprocess.check_output( [ "oslinfo", shaderFile ] ).split( "\n" ) :
@@ -275,9 +283,9 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 			if words[0] == "surface" :
 				result += "\t\t<output name=\"Ci\" type=\"closure color\"/>\n"
 			elif words[0] == "output" :
-				result += "\t\t<output name=\"%s\" type=\"%s\"/>\n" % ( words[2], words[1] )
+				result += "\t\t<output name=\"%s\" type=\"%s\"/>\n" % ( words[2], types[words[1]] )
 			elif words[0] in types :
-				result += "\t\t<input name=\"%s\" type=\"%s\"/>\n" % ( words[1], words[0] )
+				result += "\t\t<input name=\"%s\" type=\"%s\"/>\n" % ( words[1], types[words[0]] )
 	
 		cls.__shaderParameterDefinitions[shaderFile] = result
 		return result
