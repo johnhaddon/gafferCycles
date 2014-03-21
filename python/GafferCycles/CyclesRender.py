@@ -35,6 +35,7 @@
 ##########################################################################
 
 import os
+import subprocess
 
 import IECore
 
@@ -91,7 +92,7 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 				self.__writeScene( f )
 				
 			if self["mode"].getValue() == "render" :
-				os.system( "cycles '%s'&" % fileName )
+				os.system( "cycles --shadingsys osl '%s'&" % fileName )
 			
 	def __writeScene( self, f ) :
 	
@@ -106,7 +107,9 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 		)
 		
 		state = {
+			"shadersWritten" : set(),
 			"transform" : IECore.M44f(),
+			"attributes" : IECore.CompoundObject(),
 		}
 		
 		self.__walkScene( f, state, IECore.InternedStringVectorData() )
@@ -149,8 +152,12 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 		
 	def __walkScene( self, f, state, path ) :
 	
-		state = state.copy()
-		state["transform"] = state["transform"] * self["in"].transform( path )
+		state = {
+			"shadersWritten" : state["shadersWritten"],
+			"transform" : state["transform"] * self["in"].transform( path ),
+			"attributes" : state["attributes"].copy(),
+		}
+		state["attributes"].update( self["in"].attributes( path ) )
 	
 		object = self["in"].object( path )
 		if object is not None :
@@ -163,14 +170,71 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 			childPath.append( childName )
 		
 			self.__walkScene( f, state, childPath )
+	
+	def __writeShader( self, f, state ) :
+	
+		shader = state["attributes"].get( "shader" )
+		if shader is None :
+			return None
+	
+		name = str( shader.hash() )
+		if name in state["shadersWritten"] :
+			return name
+		
+		f.write( '<shader name="%s">\n' % str( shader.hash() ) )
+		
+		for s in shader :
+		
+			handle = s.parameters.get( "__handle", None )
+			handle = handle.value if handle is not None else "surface"
+			shaderFile = self.__shaderFile( s )
+			
+			f.write( '\t<osl_shader name="%s" src="%s"' % ( handle, shaderFile ) )
+			
+			for parameterName, parameterValue in s.parameters.items() :
+				if parameterName.startswith( "__" ) :
+					continue
+				if isinstance( parameterValue, IECore.StringData ) and parameterValue.value.startswith( "link:" ) :
+					continue
+				f.write( ' %s="%s"' % ( parameterName, str( parameterValue ) ) )
+			
+			f.write( ">\n" )
+		
+			f.write( self.__shaderParameterDefinition( shaderFile ) )
+			
+			f.write( '\t</osl_shader>\n' )
+			
+			for parameterName, parameterValue in s.parameters.items() :
+				if isinstance( parameterValue, IECore.StringData ) and parameterValue.value.startswith( "link:" ) :
+					fromShader, fromParameter = parameterValue.value[5:].split( "." )
+					f.write( '\t<connect from="%s %s" to="%s %s"/>\n' % (
+							fromShader,
+							fromParameter,
+							handle,
+							parameterName
+						)
+					)
+			
+		f.write( '\t<connect from="surface Ci" to="output surface"/>\n' )
+
+		f.write( '</shader>\n\n' )
+	
+		state["shadersWritten"].add( name )
+	
+		return name
 			
 	def __writeObject( self, f, state, object ) :
 	
 		if not isinstance( object, IECore.MeshPrimitive ) :
 			return
 		
+		shaderName = self.__writeShader( f, state )
+		
 		f.write( '<transform matrix="' + str( state["transform"] ) + '">\n' )
-		f.write( "<state>\n" )
+		f.write( '<state' )
+		if shaderName is not None :
+			f.write( ' shader="%s"' % shaderName )
+		f.write( '>\n' )
 		
 		self.__writeMeshPrimitive( f, object )
 		
@@ -186,6 +250,37 @@ class CyclesRender( GafferScene.ExecutableRender ) :
 		if mesh.interpolation == "catmullClark" :
 			f.write( 'subdivision="catmull-clark"\n' )
 		f.write( "/>\n" )
+	
+	def __shaderFile( self, shader ) :
+	
+		searchPath = IECore.SearchPath( os.environ["OSL_SHADER_PATHS"], ":" )
+		return searchPath.find( shader.name + ".oso" )
+	
+	__shaderParameterDefinitions = {}
+	@classmethod
+	def __shaderParameterDefinition( cls, shaderFile ) :
+	
+		result = cls.__shaderParameterDefinitions.get( shaderFile )
+		if result is not None :
+			return result
+		
+		types = { "float", "string", "point", "vector", "normal", "color", "closure color" }
+		
+		result = ""
+		for line in subprocess.check_output( [ "oslinfo", shaderFile ] ).split( "\n" ) :
+			words = line.split()
+			if not words :
+				continue
+				
+			if words[0] == "surface" :
+				result += "\t\t<output name=\"Ci\" type=\"closure color\"/>\n"
+			elif words[0] == "output" :
+				result += "\t\t<output name=\"%s\" type=\"%s\"/>\n" % ( words[2], words[1] )
+			elif words[0] in types :
+				result += "\t\t<input name=\"%s\" type=\"%s\"/>\n" % ( words[1], words[0] )
+	
+		cls.__shaderParameterDefinitions[shaderFile] = result
+		return result
 	
 IECore.registerRunTimeTyped( CyclesRender )
 
